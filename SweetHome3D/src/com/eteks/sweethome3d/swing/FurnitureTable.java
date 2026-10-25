@@ -131,6 +131,7 @@ public class FurnitureTable extends JTable implements View, Printable {
   private int                    furnitureInformationRow;
   private Popup                  furnitureInformationPopup;
   private AWTEventListener       informationPopupRemovalListener;
+  private boolean                levelColumnPrinted;
 
   /**
    * Creates a table that displays furniture of <code>home</code>.
@@ -750,36 +751,58 @@ public class FurnitureTable extends JTable implements View, Printable {
           return headerRendererLabel;
         }
       };
+    boolean levelColumnDisplayed = false;
     for (int columnIndex = 0, n = columnModel.getColumnCount(); columnIndex < n; columnIndex++) {
-      final TableColumn tableColumn = columnModel.getColumn(columnIndex);
-      // Create a printable column from existing table column
-      TableColumn printableColumn = new TableColumn();
-      printableColumn.setIdentifier(tableColumn.getIdentifier());
-      printableColumn.setHeaderValue(tableColumn.getHeaderValue());
-      TableCellRenderer printableCellRenderer = new TableCellRenderer() {
-          public Component getTableCellRendererComponent(JTable table, Object value, 
-                                 boolean isSelected, boolean hasFocus, int row, int column) {
-            // Delegate rendering to existing cell renderer 
-            TableCellRenderer cellRenderer = tableColumn.getCellRenderer();
-            Component rendererComponent = cellRenderer.getTableCellRendererComponent(table, value, 
-                isSelected, hasFocus, row, column);
-            if (rendererComponent instanceof JCheckBox) {
-              // Prefer a x sign for boolean values instead of check boxes
-              rendererComponent = defaultRenderer.getTableCellRendererComponent(table, 
-                  ((JCheckBox)rendererComponent).isSelected() ? "x" : "", false, false, row, column);
-            }
-            rendererComponent.setBackground(Color.WHITE);
-            rendererComponent.setForeground(Color.BLACK);
-            return rendererComponent;
-          }
-        };
-      // Change printable column cell renderer 
-      printableColumn.setCellRenderer(printableCellRenderer);
-      // Change printable column header renderer
-      printableColumn.setHeaderRenderer(printableHeaderRenderer);
-      printableColumnModel.addColumn(printableColumn);
-    }    
+      TableColumn tableColumn = columnModel.getColumn(columnIndex);
+      levelColumnDisplayed |= tableColumn.getIdentifier() == HomePieceOfFurniture.SortableProperty.LEVEL;
+      printableColumnModel.addColumn(
+          createPrintableColumn(tableColumn, printableHeaderRenderer, defaultRenderer));
+    }
+    if (this.levelColumnPrinted
+        && !levelColumnDisplayed
+        && columnModel instanceof FurnitureTableColumnModel) {
+      // Append a Level column so that printed rows of different levels can be told apart
+      TableColumn levelColumn = ((FurnitureTableColumnModel)columnModel).getAvailableColumn(
+          HomePieceOfFurniture.SortableProperty.LEVEL);
+      if (levelColumn != null) {
+        printableColumnModel.addColumn(
+            createPrintableColumn(levelColumn, printableHeaderRenderer, defaultRenderer));
+      }
+    }
     return print(g, pageFormat, pageIndex, printableColumnModel, Color.BLACK);
+  }
+
+  /**
+   * Returns a column that prints the contents of the given <code>tableColumn</code> in black on white.
+   */
+  private TableColumn createPrintableColumn(final TableColumn tableColumn,
+                                            TableCellRenderer printableHeaderRenderer,
+                                            final DefaultTableCellRenderer defaultRenderer) {
+    TableColumn printableColumn = new TableColumn();
+    printableColumn.setIdentifier(tableColumn.getIdentifier());
+    printableColumn.setHeaderValue(tableColumn.getHeaderValue());
+    TableCellRenderer printableCellRenderer = new TableCellRenderer() {
+        public Component getTableCellRendererComponent(JTable table, Object value, 
+                               boolean isSelected, boolean hasFocus, int row, int column) {
+          // Delegate rendering to existing cell renderer 
+          TableCellRenderer cellRenderer = tableColumn.getCellRenderer();
+          Component rendererComponent = cellRenderer.getTableCellRendererComponent(table, value, 
+              isSelected, hasFocus, row, column);
+          if (rendererComponent instanceof JCheckBox) {
+            // Prefer a x sign for boolean values instead of check boxes
+            rendererComponent = defaultRenderer.getTableCellRendererComponent(table, 
+                ((JCheckBox)rendererComponent).isSelected() ? "x" : "", false, false, row, column);
+          }
+          rendererComponent.setBackground(Color.WHITE);
+          rendererComponent.setForeground(Color.BLACK);
+          return rendererComponent;
+        }
+      };
+    // Change printable column cell renderer 
+    printableColumn.setCellRenderer(printableCellRenderer);
+    // Change printable column header renderer
+    printableColumn.setHeaderRenderer(printableHeaderRenderer);
+    return printableColumn;
   }
 
   /**
@@ -1003,6 +1026,14 @@ public class FurnitureTable extends JTable implements View, Printable {
     FurnitureTreeTableModel tableModel = (FurnitureTreeTableModel)getModel();
     return tableModel.getFurnitureFilter();
   }
+
+  /**
+   * Sets whether a Level column should be appended to the columns printed by this table.
+   * This affects printed pages only and leaves the columns displayed on screen unchanged.
+   */
+  public void setLevelColumnPrinted(boolean levelColumnPrinted) {
+    this.levelColumnPrinted = levelColumnPrinted;
+  }
   
   /**
    * Column table model used by this table.
@@ -1015,6 +1046,13 @@ public class FurnitureTable extends JTable implements View, Printable {
       addHomeListener(home);
       addLanguageListener(preferences);
       updateModelColumns(home.getFurnitureVisibleProperties());
+    }
+
+    /**
+     * Returns the column matching the given <code>property</code>, whether it is displayed or not.
+     */
+    public TableColumn getAvailableColumn(HomePieceOfFurniture.SortableProperty property) {
+      return this.availableColumns.get(property);
     }
 
     /**
